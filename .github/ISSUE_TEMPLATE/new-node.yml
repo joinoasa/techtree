@@ -1,0 +1,31 @@
+name: New node proposal
+description: Propose a technology that's missing from the tech tree.
+title: "Proposal: "
+labels: ["proposal"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is it?
+      description: One or two sentences, plain English.
+    validations:
+      required: true
+  - type: input
+    id: requires
+    attributes:
+      label: Requires
+      description: Node IDs it builds on (e.g. R-COM2, T-PAY1)
+  - type: input
+    id: unlocks
+    attributes:
+      label: Unlocks
+      description: Node or moonshot IDs it would make possible
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      placeholder: Roots, Trunk, Air, Ground, Surface water, Underwater, Sensing…
+  - type: input
+    id: sciences
+    attributes:
+      label: What you'd learn building it

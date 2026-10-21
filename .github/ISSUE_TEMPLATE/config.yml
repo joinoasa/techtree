@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: See the tech tree
+    url: https://joinoasa.org/techtree/
+    about: Every node already has an issue here. Find it from the tree or search issues first.
+  - name: Ideas and questions
+    url: https://github.com/orgs/joinoasa/discussions
+    about: Bigger ideas and questions go in Discussions.
