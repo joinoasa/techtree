@@ -1,0 +1,140 @@
+# Lets members claim and release tech tree nodes by commenting on a node's issue.
+#   /claim    assigns you and marks the node status:in-progress (members only, available nodes only)
+#   /unclaim  releases it (the assignee, or a maintainer)
+# Guide for contributors: https://joinoasa.org/docs/claim-a-node/
+name: Claim a node
+
+on:
+  issue_comment:
+    types: [created]
+
+# Only touch issues; nothing else in the repo.
+permissions:
+  issues: write
+
+# One run at a time per issue, so two quick comments can't both claim the same node.
+concurrency:
+  group: claim-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  claim:
+    # Cheap checks first: issues (not PRs), node issues only, humans only, comment starts with a slash command.
+    if: >-
+      !github.event.issue.pull_request &&
+      github.event.sender.type != 'Bot' &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(github.event.issue.labels.*.name, 'tech-tree-node') &&
+      startsWith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7.0.1
+        with:
+          script: |
+            const GUIDE = 'https://joinoasa.org/docs/claim-a-node/';
+            const JOIN = 'https://joinoasa.org/join/';
+            const MEMBER_ROLES = ['OWNER', 'MEMBER', 'COLLABORATOR']; // may /claim
+            const LEAD_ROLES = ['OWNER', 'MEMBER'];                   // may /unclaim someone else's claim
+
+            const { owner, repo } = context.repo;
+            const number = context.payload.issue.number;
+            const comment = context.payload.comment;
+            const login = comment.user.login;
+            const role = comment.author_association;
+            if (comment.user.type === 'Bot') return; // belt and braces; the job condition already skips bots
+
+            // Command = first line of the comment, case-insensitive.
+            const first = (comment.body || '').trim().split(/\r?\n/)[0].trim();
+            const m = first.match(/^\/(claim|unclaim)(\s|$)/i);
+            if (!m) return;
+            const command = m[1].toLowerCase();
+
+            const reply = (text) =>
+              github.rest.issues.createComment({ owner, repo, issue_number: number, body: text });
+
+            // Read the issue fresh: the event payload can be stale if comments arrive quickly.
+            const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: number });
+            const labels = issue.labels.map((l) => (typeof l === 'string' ? l : l.name));
+            const assignees = issue.assignees.map((a) => a.login);
+            // Anyone assigned means the node is taken, even if the label still says available.
+            const labelled = labels.find((l) => l.startsWith('status:'));
+            const status = labelled === 'status:available' && assignees.length ? 'status:in-progress' : labelled;
+            const others = labels.filter((l) => !l.startsWith('status:'));
+            const setStatus = (s) =>
+              github.rest.issues.setLabels({ owner, repo, issue_number: number, labels: [...others, s] });
+
+            if (command === 'claim') {
+              if (!MEMBER_ROLES.includes(role)) {
+                await reply(`Thanks @${login}. Only OASA members can claim nodes. Membership is free: [apply here](${JOIN}). Until then you are welcome to comment, ask questions and help on this issue. [How claiming works](${GUIDE}).`);
+                return;
+              }
+              if (issue.state === 'closed' || status === 'status:done') {
+                await reply(`@${login} this node is already done. If you found a problem with the release, say so here.`);
+                return;
+              }
+              if (status === 'status:in-progress') {
+                if (assignees.includes(login)) {
+                  await reply(`@${login} this node is already yours. Post updates here as you go, or comment \`/unclaim\` to release it.`);
+                } else {
+                  const who = assignees.length ? assignees.map((a) => `@${a}`).join(', ') : 'someone';
+                  await reply(`@${login} ${who} is already working on this node. Comment here to offer help or join them. If a claim has gone quiet for 30 days a lead may release it. [How claiming works](${GUIDE}).`);
+                }
+                return;
+              }
+              if (status === 'status:locked') {
+                const req = (issue.body || '').match(/\*\*Requires:\*\* ([^\n]+)/);
+                await reply(`@${login} this node is **locked**, so it can't be claimed yet.${req ? ` It requires: ${req[1]}` : ''}\n\nYou can still research it, discuss approaches or help with what it requires. It opens up when those are done.`);
+                return;
+              }
+              if (status !== 'status:available') {
+                await reply(`@${login} this node has no status label, so it can't be claimed automatically. A lead will take a look.`);
+                return;
+              }
+
+              // Available: assign first and check it worked, then swap the label.
+              const { data: after } = await github.rest.issues.addAssignees({ owner, repo, issue_number: number, assignees: [login] });
+              if (!after.assignees.some((a) => a.login === login)) {
+                await reply(`@${login} I couldn't assign you (GitHub refused). A lead will sort it out.`);
+                return;
+              }
+              await setStatus('status:in-progress');
+              await reply([
+                `Claimed. @${login} you have this node, and it is now marked **in progress**.`,
+                '',
+                'Next steps:',
+                '1. Post a short plan here when you can: what you will build and how you will test it.',
+                '2. Post progress, blockers and links (code, designs, test results) as you go. Claims with no update for 30 days may be released by a lead.',
+                '3. When it meets the [release standard](https://joinoasa.org/docs/projects/#release-standard), a lead marks it done and the nodes it unlocks open up.',
+                '',
+                `Can't continue? Comment \`/unclaim\`. [How claiming works](${GUIDE}).`,
+              ].join('\n'));
+              return;
+            }
+
+            // /unclaim
+            const isAssignee = assignees.includes(login);
+            if (!isAssignee && !LEAD_ROLES.includes(role)) {
+              await reply(`@${login} only the person who claimed this node, or a lead, can release it.`);
+              return;
+            }
+            if (status === 'status:done' || issue.state === 'closed') {
+              await reply(`@${login} this node is done, so there is nothing to release.`);
+              return;
+            }
+            if (!assignees.length) {
+              await reply(`@${login} nobody has claimed this node.`);
+              return;
+            }
+            // The assignee releases their own claim; a lead releases everyone's.
+            const release = isAssignee ? [login] : assignees;
+            const { data: after } = await github.rest.issues.removeAssignees({ owner, repo, issue_number: number, assignees: release });
+            const left = after.assignees.map((a) => a.login);
+            if (!left.length && status === 'status:in-progress') {
+              await setStatus('status:available');
+              await reply(`Released. ${release.map((a) => `@${a}`).join(', ')} no longer ${release.length > 1 ? 'have' : 'has'} this node, and it is **available** again. Anyone who is a member can \`/claim\` it.`);
+            } else if (left.length) {
+              await reply(`Released. @${login} is off this node. Still assigned: ${left.map((a) => `@${a}`).join(', ')}.`);
+            } else {
+              await reply(`Released. No assignees left.`);
+            }

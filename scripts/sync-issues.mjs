@@ -6,8 +6,10 @@
 //
 // Needs the GitHub CLI (`gh`) signed in with access to the repo.
 // Safe to re-run: issues are matched by a hidden marker (<!-- oasa-node:ID -->), so nothing is duplicated.
-// Status labels come from the tree data, except a node marked in progress or done on GitHub
-// is never moved back to available/locked by this script.
+// Status labels come from the tree data, but GitHub can only raise them: done label > in-progress
+// label or any assignee > tree data. A claimed or finished node is never moved back by this script,
+// and each issue is read again just before it is changed, so a /claim made during a run is kept.
+// Assignees are never touched: the claim workflow (.github/workflows/claim.yml) owns them.
 // Writes node-issues.json (ID -> issue URL) for the website's techtree-details.json.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -20,6 +22,7 @@ const DRY = flag('dry-run');
 const OFFLINE = flag('offline');
 const OUT = arg('out', 'node-issues.json');
 const SITE = 'https://joinoasa.org';
+const CLAIM_GUIDE = `${SITE}/docs/claim-a-node/`;
 if (!DATA) { console.error('Pass --data path/to/src/data/techtree.json'); process.exit(1); }
 
 const tree = JSON.parse(readFileSync(DATA, 'utf8'));
@@ -80,7 +83,8 @@ function requiresText(n, nums) {
 }
 const title = (n) => `[${n.id}] ${n.name}`;
 const marker = (id) => `<!-- oasa-node:${id} -->`;
-function body(n, nums) {
+// `status` is the node's effective status (tree data, unless GitHub says it is further along).
+function body(n, nums, status = n.status) {
   const unlocks = n.unlocks.map((id) => ref(id, nums.get(id)));
   if (n.enables) unlocks.push(n.enables);
   const direct = n.moonshots ?? [], all = n.neededBy?.moonshots ?? [];
@@ -88,13 +92,15 @@ function body(n, nums) {
   const ms = all.length
     ? [direct.length ? `${msLinks}${all.length > direct.length ? `, and ${all.length - direct.length} more further up the tree` : ''}` : `${all.length} further up the tree`]
     : [];
-  const how = n.status === 'locked'
+  const how = status === 'locked'
     ? 'This node is **locked** until what it requires is done. You can still research it, discuss approaches or help with what it requires.'
-    : n.status === 'available'
-      ? '**Members:** comment with a line on your plan, and a lead will assign it to you. Not a member? [Apply](' + SITE + '/join/). It\'s free. Anyone can comment and help.'
-      : 'Comment to join the people already working on it.';
+    : status === 'available'
+      ? `**Members:** comment \`/claim\` on this issue to take it. It's assigned to you automatically. [How claiming works](${CLAIM_GUIDE}). Not a member? [Apply](${SITE}/join/). It's free. Anyone can comment and help.`
+      : status === 'done'
+        ? 'This node is done. Comment if you find a problem with the release.'
+        : `Comment to join the people already working on it. If you are the assignee and can't continue, comment \`/unclaim\` to release it. [How claiming works](${CLAIM_GUIDE}).`;
   return [
-    `**${STATUS[n.status] ? n.status.replace('-', ' ').replace(/^./, (c) => c.toUpperCase()) : n.status}** · ${n.branch} · [See it on the tech tree](${SITE}/techtree/#${n.id})`,
+    `**${status.replace('-', ' ').replace(/^./, (c) => c.toUpperCase())}** · ${n.branch} · [See it on the tech tree](${SITE}/techtree/#${n.id})`,
     '',
     n.brief || '',
     '',
@@ -154,24 +160,40 @@ async function main() {
   }
 
   // Pass 2: bring titles, bodies and labels up to date
-  let updated = 0;
-  for (const n of nodes) {
-    const i = found.get(n.id);
-    if (!i) continue;
+  const RANK = { locked: 0, available: 0, 'in-progress': 1, done: 2 };
+  // What the issue should look like, given the tree data and what GitHub says right now.
+  // GitHub only ever raises the status, never lowers it: done label > in-progress label or any
+  // assignee > tree data. A claimed or finished node is never moved back.
+  const plan = (n, i) => {
     const cur = i.labels?.map((l) => (typeof l === 'string' ? l : l.name)) ?? [];
-    const curStatus = cur.find((l) => l.startsWith('status:'));
-    const keepGithubStatus = ['status:in-progress', 'status:done'].includes(curStatus) && ['available', 'locked'].includes(n.status);
-    const status = keepGithubStatus ? curStatus : STATUS[n.status].name;
+    const gitSt = cur.find((l) => l.startsWith('status:'))?.replace('status:', '');
+    const ghLevel = gitSt === 'done' ? 2 : (gitSt === 'in-progress' || (i.assignees?.length ?? 0) > 0) ? 1 : 0;
+    const effective = ghLevel > RANK[n.status] ? (ghLevel === 2 ? 'done' : 'in-progress') : n.status;
+    const status = STATUS[effective].name;
     const labels = [...cur.filter((l) => !l.startsWith('status:') && !l.startsWith('branch:')), status, branchLabel(n.branch)];
     if (!labels.includes('tech-tree-node')) labels.push('tech-tree-node');
-    const want = { title: title(n), body: body(n, nums), labels };
+    const want = { title: title(n), body: body(n, nums, effective), labels };
     // Ignore a footer some tools append to issue bodies (e.g. "Generated by ...").
     const liveBody = (i.body ?? '').replace(/\n+---\n_Generated by [^\n]*_\s*$/, '');
     const same = i.title === want.title && liveBody === want.body && [...labels].sort().join() === [...cur].sort().join();
-    if (same) continue;
+    return { want, effective, same };
+  };
+  let updated = 0;
+  for (const n of nodes) {
+    let i = found.get(n.id);
+    if (!i) continue;
+    let p = plan(n, i);
+    if (p.same) continue;
     updated++;
     console.log(`~ issue #${i.number ?? '?'} ${n.id}`);
-    if (!DRY) { gh('PATCH', `repos/${REPO}/issues/${i.number}`, { ...want, ...(n.status === 'done' ? { state: 'closed', state_reason: 'completed' } : {}) }); await sleep(800); }
+    if (!DRY) {
+      // The list was read minutes ago: read this issue again, so a /claim made meanwhile is kept.
+      i = gh('GET', `repos/${REPO}/issues/${i.number}`);
+      p = plan(n, i);
+      if (p.same) { updated--; continue; }
+      gh('PATCH', `repos/${REPO}/issues/${i.number}`, { ...p.want, ...(p.effective === 'done' ? { state: 'closed', state_reason: 'completed' } : {}) });
+      await sleep(800);
+    }
   }
 
   const map = Object.fromEntries([...found].map(([id, i]) => [id, i.html_url]).sort());
