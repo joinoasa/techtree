@@ -11,6 +11,7 @@ Every node on the [OASA tech tree](https://joinoasa.org/techtree/) has an issue 
 ## Claim a node
 
 1. Comment `/claim` on the node's issue. You need to be an OASA member ([apply](https://joinoasa.org/join/); it's free). Only nodes labelled `status:available` can be claimed.
+   Make your OASA organisation membership public (GitHub profile → the organisation → Public) so `/claim` recognises you as a member.
 2. A workflow assigns the issue to you and sets `status:in-progress`, then replies with next steps.
 3. Post a short plan, then updates when you hit a milestone or get blocked. A claim with no update for 30 days may be released by a lead.
 4. Can't continue? Comment `/unclaim` and the node goes back to available.

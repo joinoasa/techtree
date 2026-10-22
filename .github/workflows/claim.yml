@@ -56,8 +56,10 @@ jobs:
             // Read the issue fresh: the event payload can be stale if comments arrive quickly.
             const { data: issue } = await github.rest.issues.get({ owner, repo, issue_number: number });
             const labels = issue.labels.map((l) => (typeof l === 'string' ? l : l.name));
-            const status = labels.find((l) => l.startsWith('status:'));
             const assignees = issue.assignees.map((a) => a.login);
+            // Anyone assigned means the node is taken, even if the label still says available.
+            const labelled = labels.find((l) => l.startsWith('status:'));
+            const status = labelled === 'status:available' && assignees.length ? 'status:in-progress' : labelled;
             const others = labels.filter((l) => !l.startsWith('status:'));
             const setStatus = (s) =>
               github.rest.issues.setLabels({ owner, repo, issue_number: number, labels: [...others, s] });
