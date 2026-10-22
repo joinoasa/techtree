@@ -1,0 +1,85 @@
+name: Register a project
+description: Tell OASA about a project built on the tech tree, so it can be listed and supported.
+title: "Project: "
+labels: ["project"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Projects are how OASA work gets organised. See [how projects work](https://joinoasa.org/docs/projects/).
+        Please read the [charter template](https://github.com/joinoasa/techtree/blob/main/docs/charter-template.md) first. You can paste a short version of it here.
+  - type: input
+    id: name
+    attributes:
+      label: Project name
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What will exist when it is done? One or two sentences, plain English.
+    validations:
+      required: true
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: A personal project is yours, with OASA's support. A community project is open for others to join and is led by you.
+      options:
+        - Personal
+        - Community
+    validations:
+      required: true
+  - type: input
+    id: nodes
+    attributes:
+      label: Tech tree nodes
+      description: Node IDs this project builds or uses (e.g. R-COM1, T-NAV1). Claim each node you will build by commenting `/claim` on its issue.
+      placeholder: R-COM1, T-NAV1
+    validations:
+      required: true
+  - type: input
+    id: lead
+    attributes:
+      label: Lead (GitHub username)
+      description: The person responsible for the project. Must be an OASA member.
+      placeholder: "@username"
+    validations:
+      required: true
+  - type: input
+    id: team
+    attributes:
+      label: Team (GitHub usernames)
+      description: Anyone else involved, if known.
+  - type: dropdown
+    id: access
+    attributes:
+      label: Who can see and join it?
+      options:
+        - Open to everyone
+        - Members only
+        - Invite only
+    validations:
+      required: true
+  - type: textarea
+    id: milestone
+    attributes:
+      label: First milestone
+      description: The first thing you will show or test, and roughly when.
+    validations:
+      required: true
+  - type: textarea
+    id: help
+    attributes:
+      label: Help needed
+      description: Skills, hardware, review, testing, money. Anything you are missing.
+  - type: checkboxes
+    id: agree
+    attributes:
+      label: Before you submit
+      options:
+        - label: I am an OASA member, or I have applied at https://joinoasa.org/join/
+          required: true
+        - label: I will share the work openly under an open licence once it is released
+          required: true
