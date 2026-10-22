@@ -35,7 +35,7 @@ Building something that uses several nodes? [Register a project](https://github.
 
 ## Where the tree comes from
 
-The tree's source of truth is `source/OASA-techtree.md` in the [website repo](https://github.com/joinoasa/website). To propose a new node or change one, open a [new node proposal](https://github.com/joinoasa/techtree/issues/new?template=new-node.yml) or post in [Discussions](https://github.com/orgs/joinoasa/discussions).
+The tree's source of truth is `source/OASA-techtree.md` in the [website repo](https://github.com/joinoasa/website). To propose a new node or change one, [post it as an idea](https://github.com/joinoasa/ideas/issues/new?template=idea.yml) in [joinoasa/ideas](https://github.com/joinoasa/ideas): it gets a number and is sorted onto the tree. Brainstorming with AI? Use the [brainstorming guide](https://joinoasa.org/docs/brainstorm/). AI agents working in this repo: see [AGENTS.md](AGENTS.md).
 
 `scripts/sync-issues.mjs` creates and updates these issues from the website's tech tree data.
 
