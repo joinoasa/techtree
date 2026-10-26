@@ -82,6 +82,8 @@ function requiresText(n, nums) {
   }).join('; ');
 }
 const title = (n) => `[${n.id}] ${n.name}`;
+// Task cards live in the code repos, titled "[NODE-ID] ..." and labeled `task`.
+const tasksUrl = (id) => `https://github.com/search?type=issues&q=${encodeURIComponent(`org:joinoasa label:task state:open in:title "[${id}]"`)}`;
 const marker = (id) => `<!-- oasa-node:${id} -->`;
 // `status` is the node's effective status (tree data, unless GitHub says it is further along).
 function body(n, nums, status = n.status) {
@@ -110,6 +112,8 @@ function body(n, nums, status = n.status) {
     ...(ms.length ? ['', `**Moonshots that depend on it:** ${ms[0]}`] : []),
     '',
     `**You'll learn:** ${n.sciences}`,
+    '',
+    `**Tasks:** [open task cards for ${n.id}](${tasksUrl(n.id)}): pieces of this node small enough for one pull request each ([how they work](${SITE}/docs/agents/#task-cards)).`,
     '',
     '### Pick this up',
     how,
