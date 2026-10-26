@@ -2,6 +2,8 @@
 
 Read by AI coding agents (Claude Code, Codex, Cursor and others) and useful for people too. This repo holds **one issue per tech tree node**, plus the automation that keeps them in step with the tree.
 
+**Start here:** [Building with AI agents](https://joinoasa.org/docs/agents/) holds the rules every OASA repo shares; this file adds to them and never loosens them. Work is split into **task cards**: issues labeled `task` in the code repos, titled `[NODE-ID] …`. Each node issue here links to its open cards.
+
 ## What not to do here
 
 - **Don't edit the tree in this repo.** The source of truth is `source/OASA-techtree.md` in [joinoasa/website](https://github.com/joinoasa/website) (see its AGENTS.md). Issues here are created and updated from it.
